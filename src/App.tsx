@@ -1,229 +1,121 @@
-import { useState } from "react";
-import RepositoryCard from "./components/RepositoryCard";
-import "./App.css";
-
-type GitHubRepository = {
-  id: number;
-  name: string;
-  description: string | null;
-  html_url: string;
-  hasReadme?: boolean | null;
-};
-
-function parseRepositoryUrl(value: string) {
-  try {
-    const url = new URL(value.trim());
-
-    if (url.protocol !== "https:" || url.hostname !== "github.com") {
-      return null;
-    }
-
-    const parts = url.pathname.split("/").filter(Boolean);
-
-    if (parts.length !== 2) {
-      return null;
-    }
-
-    return {
-      owner: parts[0],
-      repo: parts[1],
-    };
-  } catch {
-    return null;
-  }
-}
-
-function findMissingScripts(
-  readme: string,
-  scripts: Record<string, string>
-): string[] {
-
-  const commands = [
-    ...readme.matchAll(/\bnpm\s+run\s+([\w:-]+)/g)
-  ].map((match) => match[1]);
-
-  const uniqueCommands = [...new Set(commands)];
-
-  return uniqueCommands.filter(
-    (command) => !Object.hasOwn(scripts, command)
-  );
-}
+import { useRef, useState } from 'react';
+import AuditDashboard from './components/AuditDashboard.js';
+import type { AuditFilter } from './components/AuditDashboard.js';
+import ReadmeResults from './components/ReadmeResults.js';
+import { GitHubClient, parseRepositoryUrl } from './services/github.js';
+import { cachedScan, saveScan, scanRepositories } from './services/audit.js';
+import { analyzeRepository, clearAnalysisCache } from './services/analyze.js';
+import type { Analysis } from './services/analyze.js';
+import type { Scan } from './types.js';
+import './App.css';
 
 function App() {
+  const [activeTab, setActiveTab] = useState<'audit' | 'readme'>('audit');
+  const [username, setUsername] = useState('');
+  const [repoUrl, setRepoUrl] = useState('');
+  const [filter, setFilter] = useState<AuditFilter>('all');
+  const [scan, setScan] = useState<Scan | null>(null);
+  const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [analyzedUrl, setAnalyzedUrl] = useState('');
+  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [username, setUsername] = useState("");
-  const [activeTab, setActiveTab] = useState("audit");
-  const [repos, setRepos] = useState<GitHubRepository[]>([]);
+  const [operation, setOperation] = useState<'audit' | 'readme' | null>(null);
+  const [notice, setNotice] = useState('');
+  const controller = useRef<AbortController | null>(null);
 
-  const totalRepos = repos.length;
-
-  const documentRepos = repos.filter(
-    (repo) => repo.hasReadme === true
-  ).length;
-
-  const missingReadmes = repos.filter(
-    (repo) => repo.hasReadme === false
-  ).length;
-
-  const [filter, setFilter] = useState("all");
-
-  const filteredRepos = repos.filter((repo) => {
-    if (filter === "missing") {
-      return repo.hasReadme === false;
+  async function handleSearch(continueScan = false, fresh = false) {
+    if (controller.current) return;
+    const account = continueScan && scan ? scan.username : username.trim();
+    if (!/^[a-z\d](?:[a-z\d-]{0,38})$/i.test(account)) {
+      setError('Enter a valid GitHub username.');
+      return;
     }
-
-    if (filter === "documented") {
-      return repo.hasReadme === true;
+    setError('');
+    setNotice('');
+    setFilter('all');
+    const previous = fresh ? null : continueScan ? scan : cachedScan(account);
+    if (previous && !continueScan) {
+      setScan(previous);
+      setNotice('Showing cached session results. Continue any unfinished checks or start a fresh scan.');
+      return;
     }
-
-    return true;
-  });
-
-  const [repoUrl, setRepoUrl] = useState("");
-
-  const [readmeContent, setReadmeContent] = useState("");
-  const [readmeError, setReadmeError] = useState("");
-
-  const [missingScripts, setMissingScript] = useState<string[] | null>(null);
-
-  const [packageStatus, setPackageStatus] = useState<
-    "idle" | "ready" | "missing" | "error"
-  >("idle");
-  async function handleReadmeSearch() {
-    if (isLoading) return;
+    const abort = new AbortController();
+    controller.current = abort;
     setIsLoading(true);
+    setOperation('audit');
+    setScan(previous ?? {
+      username: account,
+      repos: [],
+      nextPage: 1,
+      updatedAt: new Date().toISOString(),
+      message: '',
+    });
+    try {
+      await scanRepositories(account, new GitHubClient(abort.signal), previous, setScan);
+    } finally {
+      controller.current = null;
+      setIsLoading(false);
+      setOperation(null);
+    }
+  }
 
-    const repository = parseRepositoryUrl(repoUrl);
-
+  async function handleReadmeSearch(value = repoUrl, fresh = false) {
+    if (controller.current) return;
+    const repository = parseRepositoryUrl(value);
     if (!repository) {
-      setReadmeError("Please enter a valid GitHub repository URL.");
-      setReadmeContent("");
-      setIsLoading(false);
-      return;
-
-    }
-
-    setReadmeError("");
-    setReadmeContent("");
-    setPackageStatus("idle");
-    setMissingScript(null);
-
-    try {
-      const response = await fetch(
-        `https://api.github.com/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/readme`,
-        {
-          headers: {
-            Accept: "Application/vnd.github.raw+json",
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`README request failed: ${response.status}`);
-      }
-
-      const content = await response.text();
-
-      setReadmeContent(content);
-
-      const packageResponse = await fetch(
-        `https://api.github.com/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/contents/package.json`,
-        {
-          headers: {
-            Accept: "application/vnd.github.raw+json",
-          },
-        }
-      );
-
-      if (packageResponse.status === 404) {
-        setPackageStatus("missing");
-      } else if (!packageResponse.ok) {
-        setPackageStatus("error");
-      } else {
-        const packageJson = JSON.parse(await packageResponse.text());
-
-        const missing = findMissingScripts(
-          content,
-          packageJson.scripts ?? {}
-        );
-        setMissingScript(missing);
-        setPackageStatus("ready");
-
-      }
-      console.log("README retrieved successfully");
-    } catch (error) {
-      setReadmeError(
-        error instanceof Error ? error.message : "Unexpected error"
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function checkReadme(
-    owner: string,
-    repo: string
-  ): Promise<boolean | null> {
-    try {
-      const response = await fetch(
-        `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`
-      );
-
-      if (response.status === 404) {
-        return false;
-      }
-
-      if (!response.ok) {
-        console.warn(`Could not check ${repo}: ${response.status}`);
-        return null;
-      }
-
-      return true;
-    } catch (error) {
-      console.error("README check failed", error);
-      return null;
-    }
-  }
-
-  async function handleSearch() {
-    if (isLoading) return;
-
-    if (!username.trim()) {
-      alert("Please enter a GitHub username");
+      setError('Enter a public GitHub repository URL, such as https://github.com/owner/project.');
       return;
     }
-
-    setHasSearched(false);
-    setRepos([]);
+    const abort = new AbortController();
+    controller.current = abort;
     setIsLoading(true);
-
+    setOperation('readme');
+    setError('');
+    setNotice('');
+    setAnalysis(null);
+    setAnalyzedUrl(value);
+    setRepoUrl(value);
+    setActiveTab('readme');
+    if (fresh) clearAnalysisCache(repository.owner, repository.repo);
     try {
-      const response = await fetch(
-        `https://api.github.com/users/${encodeURIComponent(username.trim())}/repos?per_page=20&sort=updated`
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch repositories");
+      const result = await analyzeRepository(repository.owner, repository.repo, new GitHubClient(abort.signal, 25));
+      setAnalysis(result);
+      if (scan) {
+        const updated: Scan = {
+          ...scan,
+          repos: scan.repos.map(repo => {
+            const matches = repo.owner.login.toLowerCase() === repository.owner.toLowerCase()
+              && repo.name.toLowerCase() === repository.repo.toLowerCase();
+            return matches ? {
+              ...repo,
+              hasReadme: true,
+              checkError: undefined,
+              findings: result.findings,
+              analysis: { analyzedAt: result.analyzedAt, summary: result.summary },
+            } : repo;
+          }),
+        };
+        saveScan(updated);
+        setScan(updated);
       }
-
-      const data: GitHubRepository[] = await response.json();
-
-      const checkedRepos = await Promise.all(
-        data.map(async (repo) => ({
-          ...repo,
-          hasReadme: await checkReadme(username.trim(), repo.name),
-        }))
-      );
-
-      setRepos(checkedRepos);
-      setHasSearched(true);
-    } catch (error) {
-      console.error("Error:", error);
+    } catch (err) {
+      setError(abort.signal.aborted
+        ? 'Analysis cancelled. You can try again when ready.'
+        : err instanceof Error ? err.message : 'Analysis failed.');
     } finally {
+      controller.current = null;
       setIsLoading(false);
+      setOperation(null);
     }
   }
+  const repos = scan?.repos ?? [];
+  const checked = repos.filter(repo => repo.hasReadme !== null).length;
+
+  const progressLabel = operation === 'readme'
+    ? 'Reading README and verifying referenced files…'
+    : scan?.nextPage !== null
+      ? `Discovering repositories… ${repos.length} found`
+      : `Checking ${checked} of ${repos.length} repositories`;
 
   return (
     <main className="app">
@@ -231,182 +123,101 @@ function App() {
         <h1>DocDrift</h1>
         <p>Keep your GitHub repositories documented.</p>
       </header>
-
       <section className="dashboard">
-        <div className="tabs">
+        <div className="tabs" aria-label="Analysis mode">
           <button
-            className={activeTab === "audit" ? "active" : ""}
-            onClick={() => setActiveTab("audit")}
+            aria-pressed={activeTab === 'audit'}
+            className={activeTab === 'audit' ? 'active' : ''}
+            onClick={() => { setActiveTab('audit'); setError(''); }}
           >
             Repository Audit
           </button>
-
           <button
-            className={activeTab === "readme" ? "active" : ""}
-            onClick={() => setActiveTab("readme")}
+            aria-pressed={activeTab === 'readme'}
+            className={activeTab === 'readme' ? 'active' : ''}
+            onClick={() => { setActiveTab('readme'); setError(''); }}
           >
             README Analyzer
           </button>
         </div>
-
-        <h2>
-          {activeTab === "audit"
-            ? "Analyze your GitHub repositories"
-            : "Check your README documentation"}
-        </h2>
-
-        <input
-          type="text"
-          placeholder={
-            activeTab === "audit"
-              ? "Enter GitHub username"
-              : "Enter GitHub repository URL"
-          }
-
-          value={activeTab === "audit" ? username : repoUrl}
-
-          onChange={(e) =>
-            activeTab === "audit"
-              ? setUsername(e.target.value)
-              : setRepoUrl(e.target.value)
-          }
-        />
-
-        <button
-          onClick={
-            activeTab === "audit"
-              ? handleSearch
-              : handleReadmeSearch
-          }
-          disabled={isLoading}
+        <h2>{activeTab === 'audit' ? 'Analyze your GitHub repositories' : 'Check your README documentation'}</h2>
+        <form
+          className="search-form"
+          onSubmit={event => {
+            event.preventDefault();
+            if (activeTab === 'audit') void handleSearch();
+            else void handleReadmeSearch();
+          }}
         >
-          {isLoading ? "Analyzing..." : "Analyze"}
-        </button>
-
-        {activeTab === "readme" && (
-          <div className="readme-result">
-            {readmeError && <p role="alert">{readmeError}</p>}
-
-            {readmeContent && (
-              <>
-                <h3>README Content Preview</h3>
-                <pre>{readmeContent.slice(0, 15000)}</pre>
-              </>
-            )}
-
-            {missingScripts !== null && (
-              <div className="analysis-results">
-                <h3>Analysis Results</h3>
-
-                {missingScripts.length === 0 ? (
-                  <p>No missing npm scripts detected.</p>
-                ) : (
-                  <ul>
-                    {missingScripts.map((script) => (
-                      <li key={script}>
-                        Missing script: {script}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-
-            {packageStatus === "missing" && (
-              <p>
-                No root package.json found.
-                npm script analysis is not available
-              </p>
-            )}
-
-            {packageStatus === "error" && (
-              <p>
-                Could not retrieve package.json.
-                Please ty again.
-              </p>
+          <label htmlFor="repository-search">
+            {activeTab === 'audit' ? 'GitHub username' : 'Public GitHub repository URL'}
+          </label>
+          <div className="search-controls">
+            <input
+              id="repository-search"
+              required
+              value={activeTab === 'audit' ? username : repoUrl}
+              placeholder={activeTab === 'audit' ? 'Enter GitHub username' : 'https://github.com/owner/project'}
+              onChange={event => activeTab === 'audit' ? setUsername(event.target.value) : setRepoUrl(event.target.value)}
+            />
+            <button disabled={isLoading}>{isLoading ? 'Analyzing...' : 'Analyze'}</button>
+            {isLoading && (
+              <button type="button" className="secondary" onClick={() => controller.current?.abort()}>
+                Cancel scan
+              </button>
             )}
           </div>
+        </form>
+        <p className="scope-note">
+          No login required. Public repositories only. GitHub usually permits 60 unauthenticated requests per hour per IP;
+          other activity shares this allowance.
+        </p>
+        {error && <p className="message error" role="alert">{error}</p>}
+        {notice && <p className="message" role="status">{notice}</p>}
+        {isLoading && (
+          <div className="progress-panel" role="status" aria-live="polite">
+            <strong>{progressLabel}</strong>
+            {operation === 'audit' && scan?.nextPage === null && (
+              <progress aria-label="README checks completed" max={Math.max(repos.length, 1)} value={checked} />
+            )}
+            <p>Completed checks are retained if you cancel or reach a request limit.</p>
+          </div>
         )}
-
-        {activeTab === "audit" && !hasSearched && (
+        {activeTab === 'audit' && !scan && (
           <div className="empty-state">
-            <div className="empty-state-icon">⌕</div>
-
-            <h3>
-              {isLoading
-                ? "Scanning repositories..."
-                : "Ready to audit your repositories?"}
-            </h3>
-
-            <p>
-              {isLoading
-                ? "Checking your public GitHub repositories."
-                : "Enter a GitHub username above to scan public repositories and discover missing README files."}
-            </p>
-
+            <div className="empty-state-icon" aria-hidden="true">⌕</div>
+            <h3>Ready to audit your repositories?</h3>
+            <p>Enter a GitHub username above to scan public repositories and discover missing README files.</p>
             <span>No GitHub login required</span>
           </div>
         )}
-
-        {activeTab === "audit" && hasSearched && (
-          <>
-            <div className="stats">
-              <div className="stat-card">
-                <h3>{totalRepos}</h3>
-                <p>Repositories Scanned</p>
-              </div>
-
-              <div className="stat-card">
-                <h3>{documentRepos}</h3>
-                <p>With README</p>
-              </div>
-
-              <div className="stat-card">
-                <h3>{missingReadmes}</h3>
-                <p>Missing README</p>
-              </div>
-
-            </div>
-
-            <div className="filters">
-              <button
-                className={filter === "all" ? "active" : ""}
-                onClick={() => setFilter("all")}
-              >
-                All
-              </button>
-
-              <button
-                className={filter === "missing" ? "active" : ""}
-                onClick={() => setFilter("missing")}
-              >
-                Missing README
-              </button>
-
-              <button
-                className={filter === "documented" ? "active" : ""}
-                onClick={() => setFilter("documented")}
-              >
-                Documented
-              </button>
-            </div>
-
-            <div className="repository-list">
-              {filteredRepos.map((repo) => (
-                <RepositoryCard
-                  key={repo.id}
-                  name={repo.name}
-                  description={repo.description ?? "No description provided"}
-                  hasReadme={repo.hasReadme ?? null}
-                  url={repo.html_url}
-                />
-              ))}
-            </div>
-          </>
+        {activeTab === 'audit' && scan && (
+          <AuditDashboard
+            scan={scan}
+            filter={filter}
+            setFilter={setFilter}
+            isLoading={isLoading}
+            onFresh={() => { void handleSearch(true, true); }}
+            onContinue={() => { void handleSearch(true); }}
+            onAnalyze={repo => { void handleReadmeSearch(repo.html_url); }}
+          />
+        )}
+        {activeTab === 'readme' && analysis && (
+          <ReadmeResults
+            analysis={analysis}
+            url={analyzedUrl}
+            isLoading={isLoading}
+            onRefresh={() => { void handleReadmeSearch(analyzedUrl, true); }}
+          />
+        )}
+        {activeTab === 'readme' && !analysis && !isLoading && (
+          <p className="empty-state">
+            Analyze a README for section suggestions, npm/Yarn/pnpm script mismatches, and local file references.
+            Python checks are limited to static file references.
+          </p>
         )}
       </section>
     </main>
   );
 }
-
 export default App;
