@@ -1,72 +1,221 @@
-:root {
-  font-family: Arial, sans-serif;
-  color: #18352b;
-  background: #ffffff;
+
+/* Main layout */
+
+.app {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 56px 24px 80px;
 }
 
-body {
-  margin: 0;
+/* Header */
+
+.app header {
+  text-align: center;
+  margin-bottom: 36px;
 }
 
-button,
-input {
-  font: inherit;
-}
-.repository-list {
-  display: grid;
-  gap: 16px;
-  margin-top: 24px;
-}
-
-.repository-card {
-  background: white;
-  border: 1px solid #e2e8e4;
-  border-radius: 10px;
-  padding: 20px;
-}
-
-.repository-card h3 {
-  margin: 0 0 8px;
+.app header h1 {
+  font-size: clamp(38px, 5vw, 54px);
+  letter-spacing: -2px;
+  font-weight: 800;
   color: #0f5a3c;
+  margin: 0 0 12px;
 }
 
-.repository-card p {
-  color: #64746a;
+.app header p {
+  color: #64766b;
+  font-size: 16px;
+  line-height: 1.6;
 }
+
+/* Dashboard */
+
+.dashboard {
+  background: #ffffff;
+  border: 1px solid #e3eae5;
+  border-radius: 20px;
+  padding: 32px;
+  box-shadow: 0 12px 36px rgba(15, 90, 60, 0.04);
+}
+
+.dashboard h2 {
+  color: #1c3027;
+  font-size: 25px;
+  letter-spacing: -0.6px;
+  margin: 32px 0 20px;
+}
+
+/* Navigation */
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  background: #f1f5f2;
+  border-radius: 12px;
+}
+
+.tabs button {
+  flex: 1;
+  padding: 14px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #607369;
+  font-size: 14px;
+  font-weight: 600;
+  transition: 0.2s ease;
+}
+
+.tabs button:hover {
+  background: #e4ede7;
+}
+
+.tabs button.active {
+  background: #0f5a3c;
+  color: white;
+  box-shadow: 0 3px 10px rgba(15, 90, 60, 0.15);
+}
+
+/* Search */
+
+.dashboard > input {
+  width: min(100%, 520px);
+  padding: 14px 16px;
+  margin: 0 10px 16px 0;
+  border: 1px solid #d6e1d9;
+  border-radius: 10px;
+  background: white;
+  color: #1c3027;
+  font-size: 14px;
+}
+
+.dashboard > input:focus {
+  border-color: #0f5a3c;
+  outline: 2px solid rgba(15, 90, 60, 0.12);
+}
+
+.dashboard > button {
+  padding: 14px 24px;
+  background: #0f5a3c;
+  color: white;
+  border: 1px solid #0f5a3c;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.dashboard > button:hover:not(:disabled) {
+  background: #08432b;
+}
+
+/* Statistics */
+
 .stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
-  margin-top: 24px;
+  margin-top: 30px;
 }
 
 .stat-card {
-  background: white;
-  border: 1px solid #e2e8e4;
-  border-radius: 12px;
-  padding: 20px;
+  background: #f8faf8;
+  border: 1px solid #e2ebe5;
+  border-radius: 14px;
+  padding: 24px 16px;
   text-align: center;
 }
 
 .stat-card h3 {
-  font-size: 32px;
   color: #0f5a3c;
-  margin: 0;
+  font-size: 34px;
+  font-weight: 750;
+  margin: 0 0 8px;
 }
 
 .stat-card p {
-  color: #64746a;
+  color: #64766b;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-@media (max-width: 600px) {
-  .stats {
-    grid-template-columns: 1fr;
-  }
+/* Filters */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 30px;
 }
+
+.filters button {
+  background: #ffffff;
+  color: #415c4c;
+  border: 1px solid #d6e1d9;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.filters button:hover {
+  background: #eaf2ec;
+}
+
+.filters button.active {
+  background: #0f5a3c;
+  border-color: #0f5a3c;
+  color: white;
+}
+
+/* Repository cards */
+
+.repository-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.repository-card {
+  background: #ffffff;
+  border: 1px solid #e2eae5;
+  border-radius: 14px;
+  padding: 22px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.repository-card:hover {
+  border-color: #a8c7b3;
+  transform: translateY(-2px);
+}
+
+.repository-card h3 {
+  color: #0f5a3c;
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+
+.repository-card p {
+  color: #687c70;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.repository-card span {
+  display: inline-block;
+  color: #536b5c;
+  background: #f1f5f2;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
 .repository-card a {
   display: inline-block;
-  margin-top: 12px;
+  margin: 12px 0 0 14px;
   color: #0f5a3c;
+  font-size: 13px;
   font-weight: 600;
   text-decoration: none;
 }
@@ -75,37 +224,148 @@ input {
   text-decoration: underline;
 }
 
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 24px;
-}
-
-.filters button {
-  background: white;
-  border: 1px solid #d7e2da;
-  border-radius: 8px;
-  color: #0f5a3c;
-  cursor: pointer;
-}
-
-.filters button:hover {
-  background: #e8f2ec;
-}
+/* README Analyzer */
 
 .readme-result {
-  margin-top: 24px;
+  margin-top: 28px;
+}
+
+.readme-result h3 {
+  font-size: 19px;
+  color: #1c3027;
+  margin-bottom: 14px;
 }
 
 .readme-result pre {
-  background: #ffffff;
-  border: 1px solid #e2e8e4;
-  border-radius: 10px;
-  padding: 16px;
-  overflow-x: auto;
+  background: #f8faf8;
+  border: 1px solid #e2eae5;
+  border-radius: 12px;
+  padding: 20px;
+
+  max-height: 280px;
+  overflow: auto;
+
+  color: #354d3e;
+  font-size: 13px;
+  line-height: 1.65;
+  text-align: left;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  max-height: 350px;
-  overflow-y: auto;
+}
+
+/* Analysis Results */
+
+.analysis-results {
+  margin-top: 22px;
+  padding: 22px;
+  border: 1px solid #dfebe2;
+  border-left: 4px solid #c9a227;
+  background: #fbfcfa;
+  border-radius: 12px;
+}
+
+.analysis-results h3 {
+  color: #0f5a3c;
+  margin: 0 0 12px;
+}
+
+.analysis-results p {
+  font-size: 14px;
+}
+
+.analysis-results li {
+  color: #ad4537;
+  margin-bottom: 8px;
+}
+
+/* Mobile */
+
+@media (max-width: 600px) {
+  .app {
+    padding: 28px 14px 48px;
+  }
+
+  .app header h1 {
+    font-size: 38px;
+  }
+
+  .dashboard {
+    padding: 20px 16px;
+    border-radius: 14px;
+  }
+
+  .dashboard h2 {
+    font-size: 21px;
+  }
+
+  .tabs {
+    flex-direction: column;
+  }
+
+  .tabs button {
+    width: 100%;
+  }
+
+  .dashboard > input,
+  .dashboard > button {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .repository-card a {
+    display: block;
+    margin-left: 0;
+  }
+
+  .readme-result pre {
+    font-size: 12px;
+    max-height: 240px;
+  }
+}
+
+
+.empty-state {
+  margin-top: 32px;
+  padding: 56px 24px;
+  text-align: center;
+  border: 1px dashed #cbded0;
+  border-radius: 16px;
+  background: #f8faf8;
+}
+
+.empty-state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 20px;
+  border-radius: 50%;
+  background: #e5f1e9;
+  color: #0f5a3c;
+  font-size: 38px;
+}
+
+.empty-state h3 {
+  margin: 0 0 12px;
+  font-size: 21px;
+  color: #1c3027;
+}
+
+.empty-state p {
+  max-width: 430px;
+  margin: 0 auto 20px;
+  color: #64766b;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.empty-state span {
+  color: #0f5a3c;
+  font-size: 12px;
+  font-weight: 600;
 }

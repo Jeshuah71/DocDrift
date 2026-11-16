@@ -2,7 +2,6 @@ import { useState } from "react";
 import RepositoryCard from "./components/RepositoryCard";
 import "./App.css";
 
-
 type GitHubRepository = {
   id: number;
   name: string;
@@ -51,6 +50,8 @@ function findMissingScripts(
 }
 
 function App() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [username, setUsername] = useState("");
   const [activeTab, setActiveTab] = useState("audit");
   const [repos, setRepos] = useState<GitHubRepository[]>([]);
@@ -84,18 +85,29 @@ function App() {
   const [readmeContent, setReadmeContent] = useState("");
   const [readmeError, setReadmeError] = useState("");
 
+  const [missingScripts, setMissingScript] = useState<string[] | null>(null);
+
+  const [packageStatus, setPackageStatus] = useState<
+    "idle" | "ready" | "missing" | "error"
+  >("idle");
   async function handleReadmeSearch() {
+    if (isLoading) return;
+    setIsLoading(true);
+
     const repository = parseRepositoryUrl(repoUrl);
 
     if (!repository) {
       setReadmeError("Please enter a valid GitHub repository URL.");
       setReadmeContent("");
+      setIsLoading(false);
       return;
-      
+
     }
 
     setReadmeError("");
     setReadmeContent("");
+    setPackageStatus("idle");
+    setMissingScript(null);
 
     try {
       const response = await fetch(
@@ -125,38 +137,34 @@ function App() {
       );
 
       if (packageResponse.status === 404) {
-        console.log("No root package.json found");
+        setPackageStatus("missing");
       } else if (!packageResponse.ok) {
-        console.error("Failed to fetch package.json");
+        setPackageStatus("error");
       } else {
-        const packageJson = JSON.parse (await packageResponse.text());
+        const packageJson = JSON.parse(await packageResponse.text());
 
-        console.log("Available scripts:", packageJson.scripts ?? {});
-        
-        const testReadme = "Run npm run dev and npm run start";
+        const missing = findMissingScripts(
+          content,
+          packageJson.scripts ?? {}
+        );
+        setMissingScript(missing);
+        setPackageStatus("ready");
 
-        const testScripts = {
-          dev: "vite",
-          build: "vite build"
-        };
-
-        const missing = findMissingScripts(testReadme, testScripts);
-
-        console.log("Missing scripts:", missing);
       }
       console.log("README retrieved successfully");
     } catch (error) {
       setReadmeError(
         error instanceof Error ? error.message : "Unexpected error"
       );
+    } finally {
+      setIsLoading(false);
     }
   }
-
 
   async function checkReadme(
     owner: string,
     repo: string
-  ) : Promise<boolean | null> {
+  ): Promise<boolean | null> {
     try {
       const response = await fetch(
         `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`
@@ -179,14 +187,20 @@ function App() {
   }
 
   async function handleSearch() {
+    if (isLoading) return;
+
     if (!username.trim()) {
       alert("Please enter a GitHub username");
       return;
     }
 
+    setHasSearched(false);
+    setRepos([]);
+    setIsLoading(true);
+
     try {
       const response = await fetch(
-        `https://api.github.com/users/${encodeURIComponent(username.trim())}/repos?per_page=5&sort=updated`
+        `https://api.github.com/users/${encodeURIComponent(username.trim())}/repos?per_page=20&sort=updated`
       );
 
       if (!response.ok) {
@@ -195,8 +209,6 @@ function App() {
 
       const data: GitHubRepository[] = await response.json();
 
-      setRepos(data);
-      
       const checkedRepos = await Promise.all(
         data.map(async (repo) => ({
           ...repo,
@@ -204,9 +216,12 @@ function App() {
         }))
       );
 
-      setRepos(checkedRepos)
+      setRepos(checkedRepos);
+      setHasSearched(true);
     } catch (error) {
       console.error("Error:", error);
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -219,11 +234,17 @@ function App() {
 
       <section className="dashboard">
         <div className="tabs">
-          <button onClick={() => setActiveTab("audit")}>
+          <button
+            className={activeTab === "audit" ? "active" : ""}
+            onClick={() => setActiveTab("audit")}
+          >
             Repository Audit
           </button>
 
-          <button onClick={() => setActiveTab("readme")}>
+          <button
+            className={activeTab === "readme" ? "active" : ""}
+            onClick={() => setActiveTab("readme")}
+          >
             README Analyzer
           </button>
         </div>
@@ -251,14 +272,15 @@ function App() {
           }
         />
 
-        <button 
+        <button
           onClick={
             activeTab === "audit"
               ? handleSearch
               : handleReadmeSearch
           }
+          disabled={isLoading}
         >
-          Analyze
+          {isLoading ? "Analyzing..." : "Analyze"}
         </button>
 
         {activeTab === "readme" && (
@@ -271,51 +293,117 @@ function App() {
                 <pre>{readmeContent.slice(0, 15000)}</pre>
               </>
             )}
+
+            {missingScripts !== null && (
+              <div className="analysis-results">
+                <h3>Analysis Results</h3>
+
+                {missingScripts.length === 0 ? (
+                  <p>No missing npm scripts detected.</p>
+                ) : (
+                  <ul>
+                    {missingScripts.map((script) => (
+                      <li key={script}>
+                        Missing script: {script}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {packageStatus === "missing" && (
+              <p>
+                No root package.json found.
+                npm script analysis is not available
+              </p>
+            )}
+
+            {packageStatus === "error" && (
+              <p>
+                Could not retrieve package.json.
+                Please ty again.
+              </p>
+            )}
           </div>
         )}
-        <div className="stats">
-          <div className="stat-card">
-            <h3>{totalRepos}</h3>
-            <p>Repositories Scanned</p>
+
+        {activeTab === "audit" && !hasSearched && (
+          <div className="empty-state">
+            <div className="empty-state-icon">⌕</div>
+
+            <h3>
+              {isLoading
+                ? "Scanning repositories..."
+                : "Ready to audit your repositories?"}
+            </h3>
+
+            <p>
+              {isLoading
+                ? "Checking your public GitHub repositories."
+                : "Enter a GitHub username above to scan public repositories and discover missing README files."}
+            </p>
+
+            <span>No GitHub login required</span>
           </div>
-            
-          <div className="stat-card">
-            <h3>{documentRepos}</h3>
-            <p>README</p>
-          </div>
+        )}
 
-          <div className="stat-card">
-            <h3>{missingReadmes}</h3>
-            <p>Missing README</p>
-          </div>
+        {activeTab === "audit" && hasSearched && (
+          <>
+            <div className="stats">
+              <div className="stat-card">
+                <h3>{totalRepos}</h3>
+                <p>Repositories Scanned</p>
+              </div>
 
-        </div>
+              <div className="stat-card">
+                <h3>{documentRepos}</h3>
+                <p>With README</p>
+              </div>
 
-        <div className="filters">
-          <button onClick={() => setFilter("all")}>
-            All
-          </button>
+              <div className="stat-card">
+                <h3>{missingReadmes}</h3>
+                <p>Missing README</p>
+              </div>
 
-          <button onClick={() => setFilter("missing")}>
-            Missing README
-          </button>
+            </div>
 
-          <button onClick={() => setFilter("documented")}>
-            Documented
-          </button>
-        </div>
+            <div className="filters">
+              <button
+                className={filter === "all" ? "active" : ""}
+                onClick={() => setFilter("all")}
+              >
+                All
+              </button>
 
-        <div className="repository-list">
-          {filteredRepos.map((repo) => (
-            <RepositoryCard
-              key={repo.id}
-              name={repo.name}
-              description={repo.description ?? "No description provided"}
-              hasReadme={repo.hasReadme ?? null}
-              url={repo.html_url}
-            />
-          ))}
-        </div>
+              <button
+                className={filter === "missing" ? "active" : ""}
+                onClick={() => setFilter("missing")}
+              >
+                Missing README
+              </button>
+
+              <button
+                className={filter === "documented" ? "active" : ""}
+                onClick={() => setFilter("documented")}
+              >
+                Documented
+              </button>
+            </div>
+
+            <div className="repository-list">
+              {filteredRepos.map((repo) => (
+                <RepositoryCard
+                  key={repo.id}
+                  name={repo.name}
+                  description={repo.description ?? "No description provided"}
+                  hasReadme={repo.hasReadme ?? null}
+                  url={repo.html_url}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </section>
     </main>
   );
