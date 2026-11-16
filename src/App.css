@@ -1,0 +1,111 @@
+:root {
+  font-family: Arial, sans-serif;
+  color: #18352b;
+  background: #ffffff;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+.repository-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.repository-card {
+  background: white;
+  border: 1px solid #e2e8e4;
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.repository-card h3 {
+  margin: 0 0 8px;
+  color: #0f5a3c;
+}
+
+.repository-card p {
+  color: #64746a;
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.stat-card {
+  background: white;
+  border: 1px solid #e2e8e4;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+}
+
+.stat-card h3 {
+  font-size: 32px;
+  color: #0f5a3c;
+  margin: 0;
+}
+
+.stat-card p {
+  color: #64746a;
+}
+
+@media (max-width: 600px) {
+  .stats {
+    grid-template-columns: 1fr;
+  }
+}
+.repository-card a {
+  display: inline-block;
+  margin-top: 12px;
+  color: #0f5a3c;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.repository-card a:hover {
+  text-decoration: underline;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.filters button {
+  background: white;
+  border: 1px solid #d7e2da;
+  border-radius: 8px;
+  color: #0f5a3c;
+  cursor: pointer;
+}
+
+.filters button:hover {
+  background: #e8f2ec;
+}
+
+.readme-result {
+  margin-top: 24px;
+}
+
+.readme-result pre {
+  background: #ffffff;
+  border: 1px solid #e2e8e4;
+  border-radius: 10px;
+  padding: 16px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 350px;
+  overflow-y: auto;
+}
