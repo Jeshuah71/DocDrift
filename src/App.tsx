@@ -34,6 +34,22 @@ function parseRepositoryUrl(value: string) {
   }
 }
 
+function findMissingScripts(
+  readme: string,
+  scripts: Record<string, string>
+): string[] {
+
+  const commands = [
+    ...readme.matchAll(/\bnpm\s+run\s+([\w:-]+)/g)
+  ].map((match) => match[1]);
+
+  const uniqueCommands = [...new Set(commands)];
+
+  return uniqueCommands.filter(
+    (command) => !Object.hasOwn(scripts, command)
+  );
+}
+
 function App() {
   const [username, setUsername] = useState("");
   const [activeTab, setActiveTab] = useState("audit");
@@ -100,10 +116,10 @@ function App() {
       setReadmeContent(content);
 
       const packageResponse = await fetch(
-        `https://api.github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/contents/package.json`,
+        `https://api.github.com/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/contents/package.json`,
         {
           headers: {
-            Accept: "application/vnd.github.raw.json",
+            Accept: "application/vnd.github.raw+json",
           },
         }
       );
@@ -115,7 +131,18 @@ function App() {
       } else {
         const packageJson = JSON.parse (await packageResponse.text());
 
-        console.log("Available sripts:", [packageJson.scripts ?? {}]);
+        console.log("Available scripts:", packageJson.scripts ?? {});
+        
+        const testReadme = "Run npm run dev and npm run start";
+
+        const testScripts = {
+          dev: "vite",
+          build: "vite build"
+        };
+
+        const missing = findMissingScripts(testReadme, testScripts);
+
+        console.log("Missing scripts:", missing);
       }
       console.log("README retrieved successfully");
     } catch (error) {
